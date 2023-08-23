@@ -9,6 +9,8 @@ import (
 	"github.com/antonmedv/expr/vm/runtime"
 )
 
+type FunctionTable map[string]*builtin.Function
+
 type Config struct {
 	Env         interface{}
 	Types       TypesTable
@@ -21,16 +23,16 @@ type Config struct {
 	Strict      bool
 	ConstFns    map[string]reflect.Value
 	Visitors    []ast.Visitor
-	Functions   map[string]*builtin.Function
+	Functions   FunctionTable
 	Pipes       bool
 }
 
 // CreateNew creates new config with default values.
 func CreateNew() *Config {
 	c := &Config{
-		Operators: make(map[string][]string),
+		Operators: make(OperatorsTable),
 		ConstFns:  make(map[string]reflect.Value),
-		Functions: make(map[string]*builtin.Function),
+		Functions: make(FunctionTable),
 		Optimize:  true,
 	}
 	for _, f := range builtin.Functions {
@@ -82,17 +84,39 @@ func (c *Config) ConstExpr(name string) {
 func (c *Config) Check() {
 	for operator, fns := range c.Operators {
 		for _, fn := range fns {
-			fnType, ok := c.Types[fn]
-			if !ok || fnType.Type.Kind() != reflect.Func {
+			fnType, foundType := c.Types[fn]
+			fnFunc, foundFunc := c.Functions[fn]
+			if !foundFunc && (!foundType || fnType.Type.Kind() != reflect.Func) {
 				panic(fmt.Errorf("function %s for %s operator does not exist in the environment", fn, operator))
 			}
-			requiredNumIn := 2
-			if fnType.Method {
-				requiredNumIn = 3 // As first argument of method is receiver.
+
+			if foundType {
+				checkType(fnType, fn, operator)
 			}
-			if fnType.Type.NumIn() != requiredNumIn || fnType.Type.NumOut() != 1 {
-				panic(fmt.Errorf("function %s for %s operator does not have a correct signature", fn, operator))
+			if foundFunc {
+				checkFunc(fnFunc, fn, operator)
 			}
+		}
+	}
+}
+
+func checkType(fnType Tag, fn string, operator string) {
+	requiredNumIn := 2
+	if fnType.Method {
+		requiredNumIn = 3 // As first argument of method is receiver.
+	}
+	if fnType.Type.NumIn() != requiredNumIn || fnType.Type.NumOut() != 1 {
+		panic(fmt.Errorf("function %s for %s operator does not have a correct signature", fn, operator))
+	}
+}
+
+func checkFunc(fn *builtin.Function, name string, operator string) {
+	if len(fn.Types) == 0 {
+		panic(fmt.Errorf("function %s for %s operator misses types", name, operator))
+	}
+	for _, t := range fn.Types {
+		if t.NumIn() != 2 || t.NumOut() != 1 {
+			panic(fmt.Errorf("function %s for %s operator does not have a correct signature", name, operator))
 		}
 	}
 }

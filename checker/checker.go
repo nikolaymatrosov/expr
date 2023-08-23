@@ -221,7 +221,7 @@ func (v *visitor) BinaryNode(node *ast.BinaryNode) (reflect.Type, info) {
 
 	// check operator overloading
 	if fns, ok := v.config.Operators[node.Operator]; ok {
-		t, _, ok := conf.FindSuitableOperatorOverload(fns, v.config.Types, l, r)
+		t, _, ok := conf.FindSuitableOperatorOverload(fns, v.config.Types, v.config.Functions, l, r)
 		if ok {
 			return t, info{}
 		}
